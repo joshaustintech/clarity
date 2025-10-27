@@ -2,21 +2,38 @@ import SwiftUI
 import SwiftData
 
 struct PeopleView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Person.createdAt, order: .reverse)
+    private var people: [Person]
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Recently Viewed") {
-                    Text("Alex Rivers")
-                    Text("Morgan Chen")
-                    Text("Sam Patel")
+            List(people) { person in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(person.name)
+                        .font(.headline)
+
+                    if let organizationName = person.organization?.name {
+                        Text(organizationName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("People")
-        }
-        .onAppear {
-            _ = modelContext
+            .overlay {
+                if people.isEmpty {
+                    ContentUnavailableView(
+                        "No People",
+                        systemImage: "person.2",
+                        description: Text("Add someone to start building your workspace.")
+                    )
+                }
+            }
         }
     }
+}
+
+#Preview {
+    PeopleView()
+        .modelContainer(ModelContainer.previewContainer())
 }

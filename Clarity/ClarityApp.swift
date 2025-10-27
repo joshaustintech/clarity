@@ -3,16 +3,7 @@ import SwiftData
 
 @main
 struct ClarityApp: App {
-    private var sharedModelContainer: ModelContainer = {
-        let schema = Schema([])
-        let configuration = ModelConfiguration()
-
-        do {
-            return try ModelContainer(for: schema, configurations: configuration)
-        } catch {
-            fatalError("Failed to create ModelContainer: \(error.localizedDescription)")
-        }
-    }()
+    private let sharedModelContainer = ModelContainer.appContainer()
 
     var body: some Scene {
         WindowGroup {
