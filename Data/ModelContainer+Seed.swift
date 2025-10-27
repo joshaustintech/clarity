@@ -26,7 +26,8 @@ private extension ModelContainer {
             Organization.self,
             Note.self,
             Reminder.self,
-            Tag.self
+            Tag.self,
+            WebLink.self
         ])
 
         do {
@@ -47,14 +48,19 @@ private extension ModelContainer {
         let discoveryTag = Tag(name: "Discovery")
         let strategyTag = Tag(name: "Strategy")
         let onboardingTag = Tag(name: "Onboarding")
+        let alexPortfolio = WebLink(url: "https://alexrivers.design")
+        let morganLinkedIn = WebLink(url: "https://linkedin.com/in/morganchen")
+        let morganDocs = WebLink(url: "https://clarity.app/roadmap")
 
         let alex = Person(
-            name: "Alex Rivers",
+            firstName: "Alex",
+            lastName: "Rivers",
             title: "Design Lead"
         )
 
         let morgan = Person(
-            name: "Morgan Chen",
+            firstName: "Morgan",
+            lastName: "Chen",
             title: "Product Manager"
         )
 
@@ -71,6 +77,9 @@ private extension ModelContainer {
         context.insert(discoveryTag)
         context.insert(strategyTag)
         context.insert(onboardingTag)
+        context.insert(alexPortfolio)
+        context.insert(morganLinkedIn)
+        context.insert(morganDocs)
         context.insert(alex)
         context.insert(morgan)
         context.insert(kickoffNote)
@@ -86,6 +95,9 @@ private extension ModelContainer {
 
         alex.notes.append(contentsOf: [kickoffNote, researchNote])
         morgan.notes.append(onboardingNote)
+
+        alex.webLinks.append(alexPortfolio)
+        morgan.webLinks.append(contentsOf: [morganLinkedIn, morganDocs])
 
         kickoffNote.tags.append(strategyTag)
         researchNote.tags.append(discoveryTag)

@@ -5,7 +5,8 @@ import SwiftData
 final class Person {
     @Attribute(.unique) var id: UUID
     var createdAt: Date
-    var name: String
+    var firstName: String
+    var lastName: String
     var title: String?
     var profileImageData: Data?
     var archivedAt: Date?
@@ -21,18 +22,24 @@ final class Person {
     @Relationship(deleteRule: .cascade, inverse: \Reminder.person)
     var reminders: [Reminder]
 
+    @Relationship(deleteRule: .cascade, inverse: \WebLink.person)
+    var webLinks: [WebLink]
+
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
-        name: String,
+        firstName: String,
+        lastName: String,
         title: String? = nil,
         profileImageData: Data? = nil,
         archivedAt: Date? = nil,
-        organization: Organization? = nil
+        organization: Organization? = nil,
+        webLinks: [WebLink] = []
     ) {
         self.id = id
         self.createdAt = createdAt
-        self.name = name
+        self.firstName = firstName
+        self.lastName = lastName
         self.title = title
         self.profileImageData = profileImageData
         self.archivedAt = archivedAt
@@ -40,5 +47,12 @@ final class Person {
         self.tags = []
         self.notes = []
         self.reminders = []
+        self.webLinks = webLinks
+    }
+}
+
+extension Person {
+    var fullName: String {
+        "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
