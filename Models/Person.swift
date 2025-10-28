@@ -56,3 +56,14 @@ extension Person {
         "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
+
+extension Person {
+    var firstInitial: String {
+        let trimmed = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let character = trimmed.first else {
+            return "#"
+        }
+
+        return String(character).uppercased()
+    }
+}

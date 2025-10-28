@@ -47,26 +47,32 @@ struct PeopleView: View {
     var body: some View {
         NavigationStack {
             List(sortedPeople) { person in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(person.fullName)
-                            .font(.headline)
+                NavigationLink {
+                    PersonDetailView(person: person)
+                } label: {
+                    HStack(spacing: 12) {
+                        PersonMonogram(person: person)
 
-                        if let organizationName = person.organization?.name {
-                            Text(organizationName)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(person.fullName)
+                                .font(.headline)
+
+                            if let organizationName = person.organization?.name {
+                                Text(organizationName)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
 
-                    Spacer()
+                        Spacer()
 
-                    if !person.webLinks.isEmpty {
-                        Text("🔗 \(person.webLinks.count)")
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.gray.opacity(0.2), in: Capsule())
+                        if !person.webLinks.isEmpty {
+                            Text("🔗 \(person.webLinks.count)")
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.2), in: Capsule())
+                        }
                     }
                 }
             }
@@ -109,4 +115,59 @@ struct PeopleView: View {
 #Preview {
     PeopleView()
         .modelContainer(ModelContainer.previewContainer())
+}
+
+private struct PersonMonogram: View {
+    let person: Person
+
+    private static let gradientPalettes: [[Color]] = [
+        [.indigo, .cyan],
+        [.purple, .pink],
+        [.blue, .teal],
+        [.orange, .yellow],
+        [.mint, .green],
+        [.red, .orange]
+    ]
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(LinearGradient(
+                    colors: palette,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+                .overlay {
+                    Circle()
+                        .fill(.white.opacity(0.18))
+                        .blendMode(.plusLighter)
+                }
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                        .blendMode(.overlay)
+                }
+
+            Text(person.firstInitial)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white.opacity(0.82))
+        }
+        .frame(width: 40, height: 40)
+        .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
+        .accessibilityHidden(true)
+    }
+
+    private var palette: [Color] {
+        let index = abs(stableHash(for: person)) % Self.gradientPalettes.count
+        return Self.gradientPalettes[index]
+    }
+
+    private func stableHash(for person: Person) -> Int {
+        let key = person.firstName + person.lastName
+        return key.unicodeScalars.reduce(0) { accumulator, scalar in
+            let value = Int(scalar.value)
+            return (accumulator &* 31 &+ value) & 0x7fffffff
+        }
+    }
 }
