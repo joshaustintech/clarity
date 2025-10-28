@@ -5,23 +5,27 @@ import SwiftData
 struct ClarityApp: App {
     private let sharedModelContainer = ModelContainer.appContainer()
     @State private var pendingReminderRoute: ReminderRoute?
+    @State private var selectedTab: Tab = .reminders
 
     var body: some Scene {
         WindowGroup {
-            TabView {
+            TabView(selection: $selectedTab) {
+                RemindersView()
+                    .tag(Tab.reminders)
+                    .tabItem {
+                        Label("Reminders", systemImage: "bell.badge.fill")
+                    }
+
                 PeopleView()
+                    .tag(Tab.people)
                     .tabItem {
                         Label("People", systemImage: "person.2.fill")
                     }
 
                 OrganizationsView()
+                    .tag(Tab.organizations)
                     .tabItem {
                         Label("Organizations", systemImage: "building.2.fill")
-                    }
-
-                RemindersView()
-                    .tabItem {
-                        Label("Reminders", systemImage: "bell.badge.fill")
                     }
             }
             .modelContainer(sharedModelContainer)
@@ -30,7 +34,7 @@ struct ClarityApp: App {
             }
             .task {
                 ReminderScheduler.configure()
-                await ReminderScheduler.registerDeepLinkHandler { url in
+                ReminderScheduler.registerDeepLinkHandler { url in
                     handleDeepLink(url)
                 }
             }
@@ -57,4 +61,10 @@ struct ClarityApp: App {
 
 private struct ReminderRoute: Identifiable {
     let id: UUID
+}
+
+private enum Tab: Hashable {
+    case reminders
+    case people
+    case organizations
 }

@@ -4,19 +4,54 @@ import SwiftData
 struct OrganizationsView: View {
     @Query(sort: \Organization.name, order: .forward)
     private var organizations: [Organization]
-    @State private var isPresentingOrganizationSheet = false
+    @State private var activeSheet: ActiveSheet?
     @State private var searchText = ""
+    @State private var filter: Filter = .active
+
+    private enum ActiveSheet: Identifiable {
+        case newOrganization
+        case search
+
+        var id: Int {
+            switch self {
+            case .newOrganization: 0
+            case .search: 1
+            }
+        }
+    }
+
+    private enum Filter: Equatable {
+        case active
+        case archived
+
+        var label: String {
+            switch self {
+            case .active:
+                return "Active"
+            case .archived:
+                return "Archived"
+            }
+        }
+    }
 
     private var filteredOrganizations: [Organization] {
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let base: [Organization]
+        switch filter {
+        case .active:
+            base = organizations.filter { !$0.isArchived }
+        case .archived:
+            base = organizations.filter(\.isArchived)
+        }
+
         guard !trimmedQuery.isEmpty else {
-            return organizations
+            return base
         }
 
         let lowercasedQuery = trimmedQuery.lowercased()
 
-        return organizations.filter { organization in
+        return base.filter { organization in
             let nameMatches = organization.name.lowercased().contains(lowercasedQuery)
             let domainMatches = organization.domain?.lowercased().contains(lowercasedQuery) ?? false
             return nameMatches || domainMatches
@@ -63,27 +98,49 @@ struct OrganizationsView: View {
             }
             .navigationTitle("Organizations")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        isPresentingOrganizationSheet = true
+                        activeSheet = .search
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search")
+
+                    Button {
+                        activeSheet = .newOrganization
                     } label: {
                         Label("Add Organization", systemImage: "plus")
                     }
                 }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        filterButton(for: .active)
+                        filterButton(for: .archived)
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityLabel("Organization filters")
+                }
             }
             .overlay {
-                if organizations.isEmpty {
+                if filteredOrganizations.isEmpty {
                     ContentUnavailableView(
-                        "No Organizations",
+                        filter == .archived ? "No Archived Organizations" : "No Organizations",
                         systemImage: "building.2",
-                        description: Text("Add an organization to keep your workspace organized.")
+                        description: Text(filter == .archived ? "Archived organizations will appear here." : "Add an organization to keep your workspace organized.")
                     )
                 }
             }
         }
         .searchable(text: $searchText, prompt: "Search organizations")
-        .sheet(isPresented: $isPresentingOrganizationSheet) {
-            OrganizationFastAddSheet()
+        .sheet(item: $activeSheet) { item in
+            switch item {
+            case .newOrganization:
+                OrganizationFastAddSheet()
+            case .search:
+                GlobalSearchSheet()
+            }
         }
     }
 
@@ -93,6 +150,20 @@ struct OrganizationsView: View {
         }
 
         return "\(count) people"
+    }
+
+    private func filterButton(for option: Filter) -> some View {
+        Button {
+            filter = option
+        } label: {
+            HStack {
+                Text(option.label)
+                if filter == option {
+                    Spacer()
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
     }
 }
 

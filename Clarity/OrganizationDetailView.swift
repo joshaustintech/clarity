@@ -2,7 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct OrganizationDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Bindable var organization: Organization
+    @State private var isPresentingEditor = false
+    @State private var isShowingDeleteConfirmation = false
 
     private var websiteURL: URL? {
         guard let domain = organization.domain?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -73,6 +77,46 @@ struct OrganizationDetailView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle(organization.name)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        toggleArchive()
+                    } label: {
+                        Label(
+                            organization.isArchived ? "Unarchive" : "Archive",
+                            systemImage: organization.isArchived ? "arrow.uturn.backward.circle" : "archivebox"
+                        )
+                    }
+
+                    Button(role: .destructive) {
+                        isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+
+                Button("Edit") {
+                    isPresentingEditor = true
+                }
+            }
+        }
+        .sheet(isPresented: $isPresentingEditor) {
+            OrganizationEditorSheet(organization: organization)
+        }
+        .confirmationDialog(
+            "Delete this organization?",
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Organization", role: .destructive) {
+                deleteOrganization()
+            }
+        } message: {
+            Text("This will remove the organization and unlink people.")
+        }
     }
 
     private var header: some View {
@@ -97,6 +141,32 @@ struct OrganizationDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)
+    }
+}
+
+private extension OrganizationDetailView {
+    func toggleArchive() {
+        if organization.isArchived {
+            organization.unarchive()
+        } else {
+            organization.archive()
+        }
+
+        saveContext()
+    }
+
+    func deleteOrganization() {
+        modelContext.delete(organization)
+        saveContext()
+        dismiss()
+    }
+
+    func saveContext() {
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to persist organization changes: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -133,5 +203,85 @@ private struct OrganizationDetailPreviewHarness: View {
             OrganizationDetailView(organization: organization)
         }
         .modelContainer(container)
+    }
+}
+
+private struct OrganizationEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var organization: Organization
+
+    @State private var name: String
+    @State private var domain: String
+    @State private var isArchived: Bool
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    init(organization: Organization) {
+        self._organization = Bindable(organization)
+        _name = State(initialValue: organization.name)
+        _domain = State(initialValue: organization.domain ?? "")
+        _isArchived = State(initialValue: organization.isArchived)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Details") {
+                    TextField("Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+
+                    TextField("Domain", text: $domain)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+
+                Section("Status") {
+                    Toggle("Archived", isOn: $isArchived)
+                }
+            }
+            .navigationTitle("Edit Organization")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", role: .cancel) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveChanges()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    private func saveChanges() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDomain = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        organization.name = trimmedName
+        organization.domain = trimmedDomain.isEmpty ? nil : trimmedDomain
+
+        if isArchived {
+            organization.archive()
+        } else {
+            organization.unarchive()
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save organization: \(error.localizedDescription)")
+        }
+
+        dismiss()
     }
 }

@@ -66,4 +66,16 @@ extension Person {
 
         return String(character).uppercased()
     }
+
+    var isArchived: Bool {
+        archivedAt != nil
+    }
+
+    func archive(at date: Date = .now) {
+        archivedAt = archivedAt ?? date
+    }
+
+    func unarchive() {
+        archivedAt = nil
+    }
 }

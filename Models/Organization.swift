@@ -27,3 +27,17 @@ final class Organization {
         self.people = []
     }
 }
+
+extension Organization {
+    var isArchived: Bool {
+        archivedAt != nil
+    }
+
+    func archive(at date: Date = .now) {
+        archivedAt = archivedAt ?? date
+    }
+
+    func unarchive() {
+        archivedAt = nil
+    }
+}

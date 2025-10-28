@@ -46,4 +46,9 @@ extension Reminder {
         let oneDay: TimeInterval = 24 * 60 * 60
         return timeInterval <= oneDay
     }
+
+    func update(dueDate: Date, message: String) {
+        self.dueDate = dueDate
+        self.message = message
+    }
 }
