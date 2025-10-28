@@ -9,6 +9,9 @@ struct RemindersView: View {
     )
     private var reminders: [Reminder]
     @State private var hasRequestedAuthorization = false
+    @State private var activeSheet: ActiveSheet?
+    @State private var showCelebration = false
+    @State private var celebrationTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -36,6 +39,22 @@ struct RemindersView: View {
                 }
             }
             .navigationTitle("Reminders")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        activeSheet = .search
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search")
+                }
+            }
+        }
+        .overlay {
+            if showCelebration {
+                CelebrationOverlay(dismiss: dismissCelebration)
+                    .transition(.opacity)
+            }
         }
         .task {
             ReminderScheduler.configure()
@@ -46,15 +65,30 @@ struct RemindersView: View {
         .task(id: remindersSignature) {
             await scheduleUpcomingReminders()
         }
+        .onAppear {
+            evaluateCelebration()
+        }
+        .onChange(of: remindersSignature) { _, _ in
+            evaluateCelebration()
+        }
+        .sheet(item: $activeSheet) { item in
+            switch item {
+            case .search:
+                GlobalSearchSheet()
+            }
+        }
     }
 }
 
 private extension RemindersView {
+    enum ActiveSheet: Identifiable {
+        case search
+
+        var id: Int { 0 }
+    }
+
     var upcomingReminders: [Reminder] {
-        let now = Date()
-        return reminders.filter { reminder in
-            !reminder.completed && reminder.dueDate >= now && reminder.person != nil
-        }
+        ReminderCelebrationEvaluator.remindersUpcoming(reminders)
     }
 
     var groupedUpcomingReminders: [ReminderDayGroup] {
@@ -67,6 +101,7 @@ private extension RemindersView {
             .sorted { $0.date < $1.date }
     }
 
+    @MainActor
     var remindersSignature: [ReminderSignature] {
         reminders.map(ReminderSignature.init(reminder:))
     }
@@ -119,6 +154,36 @@ private extension RemindersView {
 
     func dueDateSort(lhs: Reminder, rhs: Reminder) -> Bool {
         lhs.dueDate < rhs.dueDate
+    }
+
+    @MainActor
+    func evaluateCelebration() {
+        let shouldCelebrate = ReminderCelebrationEvaluator.shouldCelebrate(reminders: reminders)
+        if shouldCelebrate {
+            triggerCelebration()
+        } else {
+            dismissCelebration()
+        }
+    }
+
+    @MainActor
+    func triggerCelebration() {
+        guard !showCelebration else { return }
+        showCelebration = true
+        celebrationTask?.cancel()
+        celebrationTask = Task {
+            try? await Task.sleep(for: .seconds(5))
+            await MainActor.run {
+                dismissCelebration()
+            }
+        }
+    }
+
+    @MainActor
+    func dismissCelebration() {
+        celebrationTask?.cancel()
+        celebrationTask = nil
+        showCelebration = false
     }
 }
 

@@ -4,8 +4,9 @@ import SwiftData
 struct PeopleView: View {
     @Query(sort: \Person.createdAt, order: .reverse)
     private var people: [Person]
-    @State private var isPresentingPersonSheet = false
+    @State private var activeSheet: PeopleSheet?
     @State private var sortOption: SortOption = .lastName
+    @State private var filter: Filter = .active
 
     private enum SortOption: CaseIterable, Identifiable {
         case firstName
@@ -23,30 +24,9 @@ struct PeopleView: View {
         }
     }
 
-    private var sortedPeople: [Person] {
-        switch sortOption {
-        case .firstName:
-            return people.sorted { lhs, rhs in
-                if lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedSame {
-                    return lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedAscending
-                }
-
-                return lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedAscending
-            }
-        case .lastName:
-            return people.sorted { lhs, rhs in
-                if lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedSame {
-                    return lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedAscending
-                }
-
-                return lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedAscending
-            }
-        }
-    }
-
     var body: some View {
         NavigationStack {
-            List(sortedPeople) { person in
+            List(displayedPeople) { person in
                 NavigationLink {
                     PersonDetailView(person: person)
                 } label: {
@@ -78,47 +58,66 @@ struct PeopleView: View {
             }
             .navigationTitle("People")
             .toolbar {
-                ToolbarItem(placement: .secondaryAction) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        activeSheet = .search
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search")
+
+                    Button {
+                        activeSheet = .newPerson
+                    } label: {
+                        Label("Add Person", systemImage: "plus")
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        ForEach(SortOption.allCases) { option in
-                            Button {
-                                sortOption = option
-                            } label: {
-                                HStack {
-                                    Text(option.title)
-                                    if option == sortOption {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
+                        Section("Filter") {
+                            filterButton(for: .active, label: "Active")
+                            filterButton(for: .archived, label: "Archived")
+                        }
+
+                        Section("Sort By") {
+                            ForEach(SortOption.allCases) { option in
+                                Button {
+                                    sortOption = option
+                                } label: {
+                                    HStack {
+                                        Text(option.title)
+                                        if option == sortOption {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
                                     }
                                 }
                             }
                         }
                     } label: {
-                        Label("Sort People", systemImage: "arrow.up.arrow.down")
+                        Image(systemName: "line.3.horizontal.decrease.circle")
                     }
-                    .accessibilityLabel("Sort people")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isPresentingPersonSheet = true
-                    } label: {
-                        Label("Add Person", systemImage: "plus")
-                    }
+                    .accessibilityLabel("People options")
                 }
             }
             .overlay {
-                if people.isEmpty {
+                if displayedPeople.isEmpty {
                     ContentUnavailableView(
-                        "No People",
+                        filter == .archived ? "No Archived People" : "No People",
                         systemImage: "person.2",
-                        description: Text("Add someone to start building your workspace.")
+                        description: Text(filter == .archived ? "Archived people will appear here." : "Add someone to start building your workspace.")
                     )
                 }
             }
         }
-        .sheet(isPresented: $isPresentingPersonSheet) {
-            PersonFastAddSheet()
+        .sheet(item: $activeSheet) { item in
+            switch item {
+            case .newPerson:
+                PersonFastAddSheet()
+            case .search:
+                GlobalSearchSheet()
+            }
         }
     }
 }
@@ -126,4 +125,67 @@ struct PeopleView: View {
 #Preview {
     PeopleView()
         .modelContainer(ModelContainer.previewContainer())
+}
+
+private extension PeopleView {
+    enum PeopleSheet: Identifiable {
+        case newPerson
+        case search
+
+        var id: Int {
+            switch self {
+            case .newPerson: 0
+            case .search: 1
+            }
+        }
+    }
+
+    enum Filter: Equatable {
+        case active
+        case archived
+    }
+
+    var filteredPeople: [Person] {
+        switch filter {
+        case .active:
+            return people.filter { !$0.isArchived }
+        case .archived:
+            return people.filter(\.isArchived)
+        }
+    }
+
+    var displayedPeople: [Person] {
+        switch sortOption {
+        case .firstName:
+            return filteredPeople.sorted { lhs, rhs in
+                if lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedSame {
+                    return lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedAscending
+                }
+
+                return lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedAscending
+            }
+        case .lastName:
+            return filteredPeople.sorted { lhs, rhs in
+                if lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedSame {
+                    return lhs.firstName.caseInsensitiveCompare(rhs.firstName) == .orderedAscending
+                }
+
+                return lhs.lastName.caseInsensitiveCompare(rhs.lastName) == .orderedAscending
+            }
+        }
+    }
+
+    func filterButton(for option: Filter, label: String) -> some View {
+        Button {
+            filter = option
+        } label: {
+            HStack {
+                Text(label)
+                if filter == option {
+                    Spacer()
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+    }
 }
