@@ -72,18 +72,7 @@ struct PersonDetailView: View {
             }
 
             Section("Timeline") {
-                if sortedNotes.isEmpty {
-                    ContentUnavailableView(
-                        "No Notes Yet",
-                        systemImage: "note.text",
-                        description: Text("Add the first note to start building a timeline.")
-                    )
-                } else {
-                    ForEach(sortedNotes) { note in
-                        TimelineNoteRow(note: note)
-                            .padding(.vertical, 8)
-                    }
-                }
+                timelineContent(notes: sortedNotes)
             }
         }
         .listStyle(.insetGrouped)
@@ -112,7 +101,11 @@ struct PersonDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 16) {
-                PersonAvatarView(initials: person.firstInitial)
+                PersonAvatarView(
+                    person: person,
+                    size: 72,
+                    font: .title
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(person.fullName)
@@ -186,58 +179,20 @@ struct PersonDetailView: View {
             }
         }
     }
-}
 
-private struct PersonAvatarView: View {
-    let initials: String
-
-    private static let gradientPalettes: [[Color]] = [
-        [.indigo, .cyan],
-        [.purple, .pink],
-        [.blue, .teal],
-        [.orange, .yellow],
-        [.mint, .green],
-        [.red, .orange]
-    ]
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(
-                    colors: palette,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .overlay {
-                    Circle()
-                        .fill(.white.opacity(0.18))
-                        .blendMode(.plusLighter)
-                }
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.25), lineWidth: 1)
-                        .blendMode(.overlay)
-                }
-
-            Text(initials)
-                .font(.title)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white.opacity(0.82))
-        }
-        .frame(width: 72, height: 72)
-        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
-        .accessibilityHidden(true)
-    }
-
-    private var palette: [Color] {
-        let index = abs(stableHash(for: initials)) % Self.gradientPalettes.count
-        return Self.gradientPalettes[index]
-    }
-
-    private func stableHash(for value: String) -> Int {
-        value.unicodeScalars.reduce(0) { accumulator, scalar in
-            let scalarValue = Int(scalar.value)
-            return (accumulator &* 31 &+ scalarValue) & 0x7fffffff
+    @ViewBuilder
+    private func timelineContent(notes: [Note]) -> some View {
+        if notes.isEmpty {
+            ContentUnavailableView(
+                "No Notes Yet",
+                systemImage: "note.text",
+                description: Text("Add the first note to start building a timeline.")
+            )
+        } else {
+            ForEach(notes) { note in
+                TimelineNoteRow(note: note)
+                    .padding(.vertical, 8)
+            }
         }
     }
 }
@@ -336,8 +291,8 @@ private struct NoteEditorSheet: View {
                     .disabled(!canSave)
                 }
             }
-            .onAppear {
-                DispatchQueue.main.async {
+            .task {
+                await MainActor.run {
                     isEditorFocused = true
                 }
             }
@@ -430,13 +385,13 @@ private struct PersonDetailPreviewHarness: View {
         """, person: person)
 
         let noteTwo = Note(createdAt: noteTwoDate, text: """
-        **Interview Highlights**
+        Interview Highlights:
         - Participants resonated with the new onboarding copy.
         - Need to refine the dashboard empty state.
         """, person: person)
 
         let noteThree = Note(createdAt: noteThreeDate, text: """
-        Wrapped synthesis session. Next step: compile insights for leadership review.
+        Wrapped synthesis session. Next step: compile insights for leadership review. ✅
         """, person: person)
 
         noteOne.tags.append(discovery)
