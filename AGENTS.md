@@ -35,9 +35,18 @@ Organize unit and integration coverage with Swift Testing suites under `/Tests/<
 Anchor early development around a “Tasks” experience: `TaskListView` reads `@Query(sort: \Task.createdAt, order: .reverse)` and sections items by status. Selecting a row opens `TaskDetailView` with description, due date, and completion toggle; Edit pushes `TaskEditorView`, binds form fields to a draft copy, validates, and commits via `try context.save()`. Mirror the flow in `TaskFlowUITests.swift`: add a task, confirm ordering, navigate to detail, edit, and assert persistence across relaunch.
 
 ## Running the App & Tests
+> **Local tooling note:** The CLI environment cannot switch the global developer dir, so prefix all Xcode commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` to point at the full Xcode toolchain.
+
 ```bash
-xcodebuild -project Clarity.xcodeproj -scheme Clarity -destination 'platform=iOS Simulator,name=iPhone 15' build
-xcodebuild -project Clarity.xcodeproj -scheme Clarity -destination 'platform=iOS Simulator,name=iPhone 15' test
+env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project Clarity.xcodeproj -scheme Clarity \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -configuration Debug build
+
+env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project Clarity.xcodeproj -scheme Clarity \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:ClarityTests test
 ```
 Swap the simulator name as needed. Disable parallel testing (`-parallel-testing-enabled NO`) when investigating async races. In CI (Xcode Cloud, GitHub Actions), cache DerivedData, export test logs, and fail on warnings via `OTHER_SWIFT_FLAGS="-warnings-as-errors"`.
 
