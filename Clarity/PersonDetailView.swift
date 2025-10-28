@@ -85,12 +85,24 @@ struct PersonDetailView: View {
             }
 
             ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    timelineSortOrder.toggle()
+                Menu {
+                    ForEach(TimelineSortOrder.allCases) { option in
+                        Button {
+                            timelineSortOrder = option
+                        } label: {
+                            HStack {
+                                Text(option.label)
+                                if option == timelineSortOrder {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
                 } label: {
                     Label(timelineSortOrder.label, systemImage: timelineSortOrder.iconName)
                 }
-                .accessibilityLabel("Toggle timeline order")
+                .accessibilityLabel("Sort notes timeline")
             }
         }
         .sheet(isPresented: $isPresentingNoteSheet) {

@@ -79,13 +79,24 @@ struct PeopleView: View {
             .navigationTitle("People")
             .toolbar {
                 ToolbarItem(placement: .secondaryAction) {
-                    Picker("Sort By", selection: $sortOption) {
+                    Menu {
                         ForEach(SortOption.allCases) { option in
-                            Text(option.title)
-                                .tag(option)
+                            Button {
+                                sortOption = option
+                            } label: {
+                                HStack {
+                                    Text(option.title)
+                                    if option == sortOption {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
+                    } label: {
+                        Label("Sort People", systemImage: "arrow.up.arrow.down")
                     }
-                    .pickerStyle(.menu)
+                    .accessibilityLabel("Sort people")
                 }
 
                 ToolbarItem(placement: .primaryAction) {
