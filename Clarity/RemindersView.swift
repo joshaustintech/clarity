@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -12,6 +13,10 @@ struct RemindersView: View {
     @State private var activeSheet: ActiveSheet?
     @State private var showCelebration = false
     @State private var celebrationTask: Task<Void, Never>?
+
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-testing")
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,11 +63,13 @@ struct RemindersView: View {
         }
         .task {
             ReminderScheduler.configure()
+            guard !isUITesting else { return }
             guard !hasRequestedAuthorization else { return }
             hasRequestedAuthorization = true
             await ReminderScheduler.requestAuthorization()
         }
         .task(id: remindersSignature) {
+            guard !isUITesting else { return }
             await scheduleUpcomingReminders()
         }
         .onAppear {

@@ -1,11 +1,24 @@
+import Foundation
 import SwiftUI
 import SwiftData
 
 @main
 struct ClarityApp: App {
-    private let sharedModelContainer = ModelContainer.appContainer()
+    private let sharedModelContainer: ModelContainer
     @State private var pendingReminderRoute: ReminderRoute?
-    @State private var selectedTab: Tab = .reminders
+    @State private var selectedTab: Tab
+
+    init() {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-testing") {
+            sharedModelContainer = ModelContainer.uiTestContainer()
+        } else {
+            sharedModelContainer = ModelContainer.appContainer()
+        }
+
+        let initialTab: Tab = arguments.contains("--ui-testing") ? .organizations : .reminders
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     var body: some Scene {
         WindowGroup {

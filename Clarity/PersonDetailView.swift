@@ -9,6 +9,7 @@ struct PersonDetailView: View {
     @State private var activeSheet: PersonDetailSheet?
     @State private var timelineSortOrder: TimelineSortOrder = .reverseChronological
     @State private var noteFilter: NoteFilter = .active
+    @State private var reminderFilter: ReminderFilter = .upcoming
 
     private var filteredNotes: [Note] {
         switch noteFilter {
@@ -28,16 +29,54 @@ struct PersonDetailView: View {
         }
     }
 
-    private var sortedReminders: [Reminder] {
-        person.reminders.sorted { $0.dueDate < $1.dueDate }
+    private var personReminders: [Reminder] {
+        person.reminders
     }
 
-    private var upcomingReminders: [Reminder] {
-        ReminderCelebrationEvaluator.remindersUpcoming(sortedReminders)
+    private var overdueReminders: [Reminder] {
+        let now = Date()
+        return personReminders
+            .filter { !$0.completed && $0.dueDate < now }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    private var scheduledReminders: [Reminder] {
+        ReminderCelebrationEvaluator
+            .remindersUpcoming(personReminders)
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    private var completedReminders: [Reminder] {
+        personReminders
+            .filter(\.completed)
+            .sorted { $0.dueDate > $1.dueDate }
+    }
+
+    private var hasActiveReminders: Bool {
+        !overdueReminders.isEmpty || !scheduledReminders.isEmpty
     }
 
     private var nextReminder: Reminder? {
-        upcomingReminders.first
+        overdueReminders.first ?? scheduledReminders.first
+    }
+
+    private var sortedWebLinks: [WebLink] {
+        person.webLinks.sorted { lhs, rhs in
+            lhs.createdAt < rhs.createdAt
+        }
+    }
+
+    private var webLinkItems: [WebLinkItem] {
+        sortedWebLinks.compactMap { link in
+            guard let url = normalizedURL(from: link.url) else { return nil }
+
+            return WebLinkItem(
+                id: link.id,
+                url: url,
+                title: displayHost(for: url),
+                detail: displayDetail(for: url)
+            )
+        }
     }
 
     var body: some View {
@@ -52,45 +91,46 @@ struct PersonDetailView: View {
                 summaryPlaceholder
             }
 
-            Section("Reminders") {
-                if let upcoming = nextReminder {
-                    reminderChip(for: upcoming)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 4)
+            Section("Links") {
+                if webLinkItems.isEmpty {
+                    ContentUnavailableView(
+                        "No Links",
+                        systemImage: "link",
+                        description: Text("Add web links to quickly launch resources for this person.")
+                    )
+                    .padding(.vertical, 4)
+                } else {
+                    ForEach(webLinkItems) { item in
+                        Link(destination: item.url) {
+                            PersonWebLinkRow(item: item)
+                        }
+                        .accessibilityIdentifier("personDetail.webLinkRow")
+                    }
                 }
+            }
+
+            Section("Reminders") {
+                reminderSummaryCard
+                    .padding(.vertical, 4)
 
                 Button {
+                    reminderFilter = .upcoming
                     activeSheet = .reminder(ReminderEditorConfig(mode: .create(person: person)))
                 } label: {
-                    Label("+ Reminder", systemImage: "plus.circle.fill")
+                    Label("New Reminder", systemImage: "plus.circle.fill")
                 }
 
-                if sortedReminders.isEmpty {
+                if personReminders.isEmpty {
                     ContentUnavailableView(
                         "No Reminders",
                         systemImage: "bell",
                         description: Text("Add reminders to keep follow-ups on track.")
                     )
+                    .padding(.vertical, 4)
                 } else {
-                    ForEach(sortedReminders) { reminder in
-                        PersonReminderRow(
-                            reminder: reminder,
-                            toggleCompletion: { toggleReminderCompletion(reminder) }
-                        )
-                        .swipeActions {
-                            Button {
-                                activeSheet = .reminder(ReminderEditorConfig(mode: .edit(reminder: reminder)))
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-
-                            Button(role: .destructive) {
-                                deleteReminder(reminder)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
+                    reminderFilterPicker
+                        .padding(.vertical, 4)
+                    remindersList
                 }
             }
 
@@ -193,6 +233,99 @@ struct PersonDetailView: View {
 }
 
 private extension PersonDetailView {
+    var reminderSummaryCard: some View {
+        ReminderSummaryCard(
+            overdueCount: overdueReminders.count,
+            upcomingCount: scheduledReminders.count,
+            completedCount: completedReminders.count,
+            spotlight: nextReminder
+        )
+    }
+
+    @ViewBuilder
+    var reminderFilterPicker: some View {
+        Picker("Reminder Filter", selection: $reminderFilter) {
+            ForEach(ReminderFilter.allCases) { option in
+                Text(option.label)
+                    .tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Reminder filter")
+    }
+
+    @ViewBuilder
+    var remindersList: some View {
+        switch reminderFilter {
+        case .upcoming:
+            if hasActiveReminders {
+                if !overdueReminders.isEmpty {
+                    ReminderGroupHeader(title: "Overdue")
+                        .padding(.top, 4)
+                    ForEach(overdueReminders) { reminder in
+                        reminderRow(for: reminder, status: .overdue)
+                    }
+                }
+
+                if !scheduledReminders.isEmpty {
+                    ReminderGroupHeader(title: "Scheduled")
+                        .padding(.top, overdueReminders.isEmpty ? 4 : 12)
+                    ForEach(scheduledReminders) { reminder in
+                        reminderRow(for: reminder, status: .upcoming)
+                    }
+                }
+            } else {
+                ContentUnavailableView(
+                    "No Active Reminders",
+                    systemImage: "bell.badge",
+                    description: Text("Add a reminder to schedule your next follow-up.")
+                )
+                .padding(.vertical, 4)
+            }
+        case .completed:
+            if completedReminders.isEmpty {
+                ContentUnavailableView(
+                    "No Completed Reminders",
+                    systemImage: "checkmark.circle",
+                    description: Text("Mark reminders complete to see them here.")
+                )
+                .padding(.vertical, 4)
+            } else {
+                ReminderGroupHeader(title: "Completed")
+                    .padding(.top, 4)
+                ForEach(completedReminders) { reminder in
+                    reminderRow(for: reminder, status: .completed)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func reminderRow(for reminder: Reminder, status: PersonReminderRow.Status) -> some View {
+        NavigationLink {
+            ReminderDetailView(reminder: reminder)
+        } label: {
+            PersonReminderRow(
+                reminder: reminder,
+                status: status,
+                toggleCompletion: { toggleReminderCompletion(reminder) }
+            )
+        }
+        .swipeActions {
+            Button {
+                activeSheet = .reminder(ReminderEditorConfig(mode: .edit(reminder: reminder)))
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+
+            Button(role: .destructive) {
+                deleteReminder(reminder)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
     enum TimelineSortOrder: String, CaseIterable, Identifiable {
         case chronological
         case reverseChronological
@@ -205,6 +338,22 @@ private extension PersonDetailView {
                 return "Oldest First"
             case .reverseChronological:
                 return "Newest First"
+            }
+        }
+    }
+
+    enum ReminderFilter: String, CaseIterable, Identifiable {
+        case upcoming
+        case completed
+
+        var id: ReminderFilter { self }
+
+        var label: String {
+            switch self {
+            case .upcoming:
+                return "Upcoming"
+            case .completed:
+                return "Completed"
             }
         }
     }
@@ -311,7 +460,9 @@ private extension PersonDetailView {
                     }
 
                     if let organization = person.organization {
-                        organizationLink(organization)
+                        Text(organization.name)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -337,38 +488,43 @@ private extension PersonDetailView {
         )
     }
 
-    func reminderChip(for reminder: Reminder) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bell.badge")
-                .imageScale(.medium)
+    private func normalizedURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(reminder.message)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text(reminder.dueDate, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        if let url = URL(string: trimmed), let scheme = url.scheme, !scheme.isEmpty {
+            return url
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.blue.opacity(0.1), in: Capsule())
+
+        return URL(string: "https://\(trimmed)")
     }
 
-    func organizationLink(_ organization: Organization) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(organization.name)
-                .font(.subheadline)
-
-            if let domain = organization.domain, let url = URL(string: "https://\(domain)") {
-                Link(destination: url) {
-                    Label(domain, systemImage: "link")
-                        .font(.caption)
-                }
-            }
+    private func displayHost(for url: URL) -> String {
+        if let host = url.host, !host.isEmpty {
+            return host
         }
+
+        return url.absoluteString
+    }
+
+    private func displayDetail(for url: URL) -> String? {
+        var detail = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        if let query = url.query, !query.isEmpty {
+            let queryString = "?\(query)"
+            detail = detail.isEmpty ? queryString : "\(detail)\(queryString)"
+        }
+
+        if let fragment = url.fragment, !fragment.isEmpty {
+            let fragmentString = "#\(fragment)"
+            detail = detail.isEmpty ? fragmentString : "\(detail)\(fragmentString)"
+        }
+
+        if let decoded = detail.removingPercentEncoding {
+            detail = decoded
+        }
+
+        return detail.isEmpty ? nil : detail
     }
 
     func saveContext() {
@@ -380,28 +536,233 @@ private extension PersonDetailView {
     }
 }
 
-private struct PersonReminderRow: View {
-    @Bindable var reminder: Reminder
-    let toggleCompletion: () -> Void
+private struct ReminderGroupHeader: View {
+    let title: String
 
-    private var dueDateText: String {
+    var body: some View {
+        Text(title)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ReminderSummaryCard: View {
+    let overdueCount: Int
+    let upcomingCount: Int
+    let completedCount: Int
+    let spotlight: Reminder?
+
+    private var hasActiveReminders: Bool {
+        overdueCount > 0 || upcomingCount > 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "bell")
+                    .imageScale(.medium)
+                    .foregroundStyle(.blue)
+
+                Text("Reminder Overview")
+                    .font(.headline)
+            }
+
+            HStack(spacing: 16) {
+                ReminderSummaryMetric(title: "Overdue", value: overdueCount, tint: .red)
+                ReminderSummaryMetric(title: "Upcoming", value: upcomingCount, tint: .blue)
+                ReminderSummaryMetric(title: "Completed", value: completedCount, tint: .green)
+            }
+
+            Divider()
+
+            if let reminder = spotlight {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(spotlightHeading(for: reminder))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+
+                    Text(reminder.message)
+                        .font(.body)
+
+                    Text(spotlightDueDate(for: reminder))
+                        .font(.caption)
+                        .foregroundStyle(spotlightColor(for: reminder))
+                }
+            } else if !hasActiveReminders {
+                Text("No active reminders yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.blue.opacity(0.08))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func spotlightHeading(for reminder: Reminder) -> String {
+        reminder.dueDate < Date() ? "Overdue Follow-Up" : "Next Follow-Up"
+    }
+
+    private func spotlightDueDate(for reminder: Reminder) -> String {
         reminder.dueDate.formatted(date: .abbreviated, time: .shortened)
     }
+
+    private func spotlightColor(for reminder: Reminder) -> Color {
+        reminder.dueDate < Date() ? .red : (reminder.isDueSoon ? .orange : .secondary)
+    }
+}
+
+private struct ReminderSummaryMetric: View {
+    let title: String
+    let value: Int
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(value)")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(Text("\(value)"))
+    }
+}
+
+private struct WebLinkItem: Identifiable {
+    let id: UUID
+    let url: URL
+    let title: String
+    let detail: String?
+}
+
+private struct PersonWebLinkRow: View {
+    let item: WebLinkItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "link")
+                .imageScale(.medium)
+                .foregroundStyle(.blue)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "arrow.up.right.square")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.12))
+        )
+    }
+}
+
+private struct PersonReminderRow: View {
+    enum Status {
+        case overdue
+        case upcoming
+        case completed
+
+        var badgeLabel: String? {
+            switch self {
+            case .overdue:
+                return "Overdue"
+            case .upcoming:
+                return nil
+            case .completed:
+                return "Completed"
+            }
+        }
+
+        var badgeColor: Color {
+            switch self {
+            case .overdue:
+                return .red
+            case .upcoming:
+                return .blue
+            case .completed:
+                return .green
+            }
+        }
+
+        func subtitle(for reminder: Reminder) -> String {
+            let formatted = reminder.dueDate.formatted(date: .abbreviated, time: .shortened)
+            switch self {
+            case .overdue:
+                return "Was due \(formatted)"
+            case .upcoming:
+                return "Due \(formatted)"
+            case .completed:
+                return "Completed \(formatted)"
+            }
+        }
+
+        func subtitleColor(for reminder: Reminder) -> Color {
+            switch self {
+            case .overdue:
+                return .red
+            case .upcoming:
+                return reminder.isDueSoon ? .orange : .secondary
+            case .completed:
+                return .secondary
+            }
+        }
+    }
+
+    @Bindable var reminder: Reminder
+    let status: Status
+    let toggleCompletion: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(reminder.message)
                     .font(.headline)
-                    .foregroundStyle(reminder.completed ? Color.secondary : Color.primary)
+                    .foregroundStyle(messageColor)
 
-                Text(dueDateText)
-                    .font(.caption)
-                    .foregroundStyle(
-                        reminder.completed
-                            ? Color.secondary
-                            : (reminder.isDueSoon ? Color.orange : Color.secondary)
-                    )
+                HStack(spacing: 8) {
+                    if let label = status.badgeLabel {
+                        Text(label)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(status.badgeColor.opacity(0.16), in: Capsule())
+                            .foregroundStyle(status.badgeColor)
+                    }
+
+                    Text(status.subtitle(for: reminder))
+                        .font(.caption)
+                        .foregroundStyle(status.subtitleColor(for: reminder))
+                }
             }
 
             Spacer()
@@ -417,6 +778,10 @@ private struct PersonReminderRow: View {
             .accessibilityLabel(reminder.completed ? "Mark incomplete" : "Mark complete")
         }
         .padding(.vertical, 6)
+    }
+
+    private var messageColor: Color {
+        reminder.completed ? .secondary : .primary
     }
 }
 

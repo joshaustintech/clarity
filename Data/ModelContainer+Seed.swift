@@ -15,6 +15,16 @@ extension ModelContainer {
 
         return container
     }
+
+    static func uiTestContainer() -> ModelContainer {
+        let container = createContainer(
+            configuration: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+
+        seedUITestData(in: container)
+
+        return container
+    }
 }
 
 // MARK: - Private Helpers
@@ -109,6 +119,45 @@ private extension ModelContainer {
             try context.save()
         } catch {
             assertionFailure("Failed to seed preview data: \(error.localizedDescription)")
+        }
+    }
+
+    static func seedUITestData(in container: ModelContainer) {
+        let context = ModelContext(container)
+
+        let organization = Organization(
+            name: "Bob Jones University",
+            domain: "https://bju.edu"
+        )
+
+        let person = Person(
+            firstName: "Taylor",
+            lastName: "Bennett",
+            title: "Admissions Coordinator",
+            organization: organization
+        )
+
+        let admissionsLink = WebLink(
+            url: "https://bju.edu/admissions",
+            person: person
+        )
+
+        let availabilityLink = WebLink(
+            url: "cal.com/taylor-bennett",
+            person: person
+        )
+
+        context.insert(organization)
+        context.insert(person)
+        context.insert(admissionsLink)
+        context.insert(availabilityLink)
+
+        person.webLinks.append(contentsOf: [admissionsLink, availabilityLink])
+
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Failed to seed UI testing data: \(error.localizedDescription)")
         }
     }
 }
